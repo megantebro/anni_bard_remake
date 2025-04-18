@@ -1,0 +1,4 @@
+name: anni_bard_remake
+version: '1.0-SNAPSHOT'
+main: lobby.anni_bard_remake.Anni_bard_remake
+api-version: '1.20'
