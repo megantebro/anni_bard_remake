@@ -4,10 +4,12 @@ import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.SoundCategory;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
@@ -15,6 +17,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -74,13 +78,15 @@ public final class Anni_bard_remake extends JavaPlugin implements Listener {
         player.openInventory(gui);
     }
     //ジュークボックスの所有者を格納する変数
-    private BiMap<Player,Block> playerByJukeboxBlock = HashBiMap.create();
+    private Map<Player,Block> playerByJukeboxBlock = new HashMap<>();
+    private Map<Block,Team> jukeboxTeamMap = new HashMap<>();
 
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         Block block = event.getBlock();
         if (block != null && block.getType() == Material.JUKEBOX) {
             playerByJukeboxBlock.put(event.getPlayer(),block);
+            jukeboxTeamMap.put(block,Bukkit.getScoreboardManager().getMainScoreboard().getPlayerTeam(event.getPlayer()));
             openCustomGUI(event.getPlayer());
         }
     }
@@ -114,9 +120,9 @@ public final class Anni_bard_remake extends JavaPlugin implements Listener {
             }
         }
     }
-
-
-
+    //bgmを既に流しているプレイヤーとジュークボックスのMap
+    Map<Block,List<Player>>jukeBoxByPlayers = new HashMap<>();
+    //一部ジュークボックスのbgmを流す処理もしているため注意
     public void applyEffectNearbyPlayers(){
         new BukkitRunnable() {
             @Override
@@ -125,8 +131,24 @@ public final class Anni_bard_remake extends JavaPlugin implements Listener {
                     Block jukeBox = entry.getKey();
                     BardEffect bardEffect = entry.getValue();
                     for(Player player : Bukkit.getOnlinePlayers()){
+                        //bgmを流していないプレイヤーにbgmを流す処理
+                        List<Player>players = jukeBoxByPlayers.get(jukeBox);
+                        if(players == null)players = new ArrayList<>();
+                        if(!players.contains(player)){
+                            player.playSound(jukeBox.getLocation(),bardEffect.getBgm(), SoundCategory.RECORDS,1f,1f);
+                            players.add(player);
+                            jukeBoxByPlayers.put(jukeBox,players);
+                        }
+
                         if(player.getLocation().distance(jukeBox.getLocation()) < bardEffect.getRange()){
-                            bardEffect.getEffect().apply(player);
+                            Scoreboard scoreboard= Bukkit.getScoreboardManager().getMainScoreboard();
+                            Team team = jukeboxTeamMap.get(jukeBox);
+                            if(
+                                    team.equals(scoreboard.getPlayerTeam(player)) && bardEffect.isFriendly()
+                                    || !team.equals(scoreboard.getPlayerTeam(player)) && !bardEffect.isFriendly()
+                            ){
+                                bardEffect.getEffect().apply(player);
+                            }
                         }
                     }
                 }
@@ -141,11 +163,35 @@ public final class Anni_bard_remake extends JavaPlugin implements Listener {
                     Block jukeBox = entry.getKey();
                     BardEffect bardEffect = entry.getValue();
                     for(Player player : Bukkit.getOnlinePlayers()){
-                        player.stopSound(bardEffect.getBgm());
-                        player.playSound(jukeBox.getLocation(),bardEffect.getBgm(),1f,1f);
+                        player.stopSound(bardEffect.getBgm(),SoundCategory.RECORDS);
+                        player.playSound(jukeBox.getLocation(),bardEffect.getBgm(),SoundCategory.RECORDS,1f,1f);
                     }
                 }
             }
-        }.runTaskTimer(this,60 * 20,0);
+        }.runTaskTimer(this,0,60 * 20);
+    }
+
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent event){
+        Block block = event.getBlock();
+        if(block.getType() == Material.JUKEBOX){
+            playerByJukeboxBlock.remove(block);
+            jukeBoxByPlayers.remove(block);
+            jukeboxTeamMap.remove(block);
+            if(!activeJukeBox.containsKey(block))return;
+            for(Player player : Bukkit.getOnlinePlayers()){
+                player.stopSound(activeJukeBox.get(block).getBgm(),SoundCategory.RECORDS);
+            }
+            activeJukeBox.remove(block);
+
+            for(Map.Entry<Block,BardEffect>entry : activeJukeBox.entrySet()){
+                Block jukeBox = entry.getKey();
+                BardEffect bardEffect = entry.getValue();
+                for(Player player : Bukkit.getOnlinePlayers()){
+                    player.stopSound(bardEffect.getBgm(),SoundCategory.RECORDS);
+                    player.playSound(jukeBox.getLocation(),bardEffect.getBgm(),SoundCategory.RECORDS,1f,1f);
+                }
+            }
+        }
     }
 }

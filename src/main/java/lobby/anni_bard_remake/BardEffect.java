@@ -19,19 +19,19 @@ public enum BardEffect {
             20  // 範囲（ブロック数）
     ),
     HASTE(
-            true,
+            false,
             BardEffectType.HASTE,
             Sound.MUSIC_DISC_STRAD,
             20
     ),
     SLOW(
-            true,
+            false,
             BardEffectType.SLOW,
             Sound.MUSIC_DISC_MELLOHI,
             20
     ),
     GLOWING(
-            true,
+            false,
             BardEffectType.GLOWING,
             Sound.MUSIC_DISC_STAL,
             20
